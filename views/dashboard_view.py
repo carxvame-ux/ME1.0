@@ -63,6 +63,9 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
         sw_farmacia = ft.Switch(label="Farmacia", value=False)
         sw_reportes = ft.Switch(label="Reportes", value=False)
 
+        dp_usr_rol = ft.Dropdown(label="Rol (Plantilla)", width=150, options=[ft.dropdown.Option("ADMINISTRADOR"), ft.dropdown.Option("MEDICO"), ft.dropdown.Option("ENFERMERIA"), ft.dropdown.Option("FARMACIA"), ft.dropdown.Option("RECEPCION")])
+        dp_usr_est = ft.Dropdown(label="Estado", width=120, value="ACTIVO", options=[ft.dropdown.Option("ACTIVO"), ft.dropdown.Option("INACTIVO")])
+
         def on_rol_change(e):
             r = dp_usr_rol.value
             sw_caja.value = r in ["ADMINISTRADOR", "RECEPCION"]
@@ -72,12 +75,13 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
             sw_reportes.value = r in ["ADMINISTRADOR"]
             if page: page.update()
 
+
         # CORRECCIÓN APLICADA AQUÍ: Separamos la creación de la asignación del evento
         dp_usr_rol = ft.Dropdown(label="Rol (Plantilla)", width=150, options=[ft.dropdown.Option("ADMINISTRADOR"), ft.dropdown.Option("MEDICO"), ft.dropdown.Option("ENFERMERIA"), ft.dropdown.Option("FARMACIA"), ft.dropdown.Option("RECEPCION")])
         dp_usr_rol.on_change = on_rol_change
         
         dp_usr_est = ft.Dropdown(label="Estado", width=120, value="ACTIVO", options=[ft.dropdown.Option("ACTIVO"), ft.dropdown.Option("INACTIVO")])
-        lst_usuarios = ft.ListView(height=200, spacing=5)
+
 
         def cargar_usuarios(e=None):
             lst_usuarios.controls.clear()

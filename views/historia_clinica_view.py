@@ -104,7 +104,8 @@ def obtener_historia_clinica_view(page: ft.Page, dni_seleccionado="", on_back=No
                         mostrar_mensaje(f"Error al copiar archivo: {ex}", ft.Colors.RED_700)
                 if page: page.update()
 
-        file_picker = ft.FilePicker(on_result=on_dialog_result)
+        file_picker = ft.FilePicker()
+        file_picker.on_result = on_dialog_result
         page.overlay.append(file_picker)
 
         # ==========================================

@@ -69,7 +69,7 @@ def obtener_agenda_view(page: ft.Page, on_navigate):
                             elevation=2,
                             content=ft.Container(
                                 padding=15,
-                                border_left=ft.border.BorderSide(5, color_est),
+                                border=ft.border.only(left=ft.border.BorderSide(width=5, color=color_est)),
                                 content=ft.Row([
                                     ft.Column([
                                         ft.Text(c.get("hora", "00:00"), size=20, weight="bold", color=ft.Colors.DEEP_PURPLE_900),
