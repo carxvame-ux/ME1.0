@@ -72,7 +72,10 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
             sw_reportes.value = r in ["ADMINISTRADOR"]
             if page: page.update()
 
-        dp_usr_rol = ft.Dropdown(label="Rol (Plantilla)", width=150, options=[ft.dropdown.Option("ADMINISTRADOR"), ft.dropdown.Option("MEDICO"), ft.dropdown.Option("ENFERMERIA"), ft.dropdown.Option("FARMACIA"), ft.dropdown.Option("RECEPCION")], on_change=on_rol_change)
+        # CORRECCIÓN APLICADA AQUÍ: Separamos la creación de la asignación del evento
+        dp_usr_rol = ft.Dropdown(label="Rol (Plantilla)", width=150, options=[ft.dropdown.Option("ADMINISTRADOR"), ft.dropdown.Option("MEDICO"), ft.dropdown.Option("ENFERMERIA"), ft.dropdown.Option("FARMACIA"), ft.dropdown.Option("RECEPCION")])
+        dp_usr_rol.on_change = on_rol_change
+        
         dp_usr_est = ft.Dropdown(label="Estado", width=120, value="ACTIVO", options=[ft.dropdown.Option("ACTIVO"), ft.dropdown.Option("INACTIVO")])
         lst_usuarios = ft.ListView(height=200, spacing=5)
 
@@ -168,7 +171,7 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
         def cobrar(e):
             if not dp_esp.value or not dp_met.value: return
             GestionRepository.registrar_admision(paciente_sel_dni, paciente_sel_nom, dp_esp.value, "0.00" if dp_met.value=="Cortesía" else in_monto.value, dp_met.value, in_aut.value)
-            page.pop_dialog(); actualizar_kpis(e); mostrar_mensaje("¡Paciente a Triaje!", ft.Colors.GREEN_700)
+            page.pop_dialog(); actualizar_kpis(e); mostrar_mensaje("¡Paciente a Triaje!", ft.Colors.GREEN_600)
 
         dlg_admision = ft.AlertDialog(title=ft.Text("Caja"), content=ft.Column([dp_esp, ft.Row([dp_met, in_monto]), in_aut], tight=True), actions=[ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()), ft.ElevatedButton("Cobrar", bgcolor=ft.Colors.GREEN_600, color="white", on_click=cobrar)])
 
@@ -224,6 +227,7 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
         # ==========================================
         seccion_superior, row_modulos = ft.Column(spacing=10), ft.Row(wrap=True)
         permisos = usuario.get("permisos", {}) if usuario else {}
+        
         if permisos.get("caja", es_admin or rol_usuario == "recepcion"):
             row_modulos.controls.append(ft.ElevatedButton("Nuevo Paciente", icon=ft.Icons.PERSON_ADD, bgcolor=ft.Colors.GREEN_700, color="white", on_click=lambda _: abrir_modal_paciente()))
             row_modulos.controls.append(ft.ElevatedButton("Agenda de Citas", icon=ft.Icons.CALENDAR_MONTH, bgcolor=ft.Colors.DEEP_PURPLE_700, color="white", on_click=lambda _: on_navigate("/agenda")))
