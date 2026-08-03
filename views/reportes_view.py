@@ -14,12 +14,13 @@ def obtener_reportes_view(page: ft.Page, on_navigate):
         nombre_usuario = usuario.get("nombres", usuario.get("nombre", "Administrador"))
         rol_usuario = str(usuario.get("rol", "sin rol")).lower()
 
-        # BLOQUEO ELEGANTE
-        if rol_usuario not in ["administrador", "admin"]:
+        # BLOQUEO ELEGANTE - Ahora manejado por main.py y permisos dinámicos
+        permisos = usuario.get("permisos", {})
+        if not permisos.get("reportes", rol_usuario in ["administrador", "admin"]):
             pantalla_bloqueo = ft.Column([
                 ft.Icon(ft.Icons.LOCK, color=ft.Colors.RED_700, size=80),
                 ft.Text("ACCESO DENEGADO", color=ft.Colors.RED_700, size=30, weight="bold"),
-                ft.Text("Tu rol actual no tiene privilegios de gerencia para ver la caja.", color=ft.Colors.GREY_700, size=16),
+                ft.Text("No tienes permisos para ver la caja y reportes.", color=ft.Colors.GREY_700, size=16),
                 ft.Container(height=20),
                 ft.ElevatedButton("Volver al Inicio", icon=ft.Icons.ARROW_BACK, on_click=lambda _: on_navigate("/"))
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
@@ -89,11 +90,37 @@ def obtener_reportes_view(page: ft.Page, on_navigate):
             if not movimientos_crudos: return mostrar_mensaje("No hay movimientos para exportar hoy.", ft.Colors.RED_700)
             try:
                 df = pd.DataFrame(movimientos_crudos)
+                if 'id' in df.columns: df = df.drop(columns=['id'])
                 fecha_hoy = datetime.datetime.now().strftime("%Y%m%d")
                 ruta_descargas = os.path.join(os.path.expanduser('~'), 'Downloads', f'Cierre_Caja_{fecha_hoy}.xlsx')
                 df.to_excel(ruta_descargas, index=False)
                 mostrar_mensaje(f"✅ Excel guardado en Descargas: Cierre_Caja_{fecha_hoy}.xlsx", ft.Colors.GREEN_700)
             except Exception as ex: mostrar_mensaje(f"Error al exportar: {ex}", ft.Colors.RED_700)
+
+        def cerrar_turno(e):
+            if not movimientos_crudos: return mostrar_mensaje("No hay movimientos abiertos para cerrar.", ft.Colors.RED_700)
+            try:
+                ingresos = sum(m["monto"] for m in movimientos_crudos if m["tipo"] == "INGRESO")
+                gastos = sum(m["monto"] for m in movimientos_crudos if m["tipo"] == "EGRESO")
+
+                id_turno = FinanzasRepository.cerrar_turno(ingresos, gastos, movimientos_crudos, nombre_usuario)
+
+                # Generar reporte PDF localmente (opcional/complementario)
+                try:
+                    from utils.generador_pdf import limpiar_texto
+                    import webbrowser
+                    # Podrías crear una función específica en generador_pdf si quieres un PDF hermoso
+                    # Aquí lo exportamos a Excel también como resguardo
+                    df = pd.DataFrame(movimientos_crudos)
+                    if 'id' in df.columns: df = df.drop(columns=['id'])
+                    ruta_pdf = os.path.abspath(f"Cierre_{id_turno}.csv")
+                    df.to_csv(ruta_pdf, index=False)
+                    webbrowser.open(f"file:///{ruta_pdf.replace(chr(92), '/')}")
+                except: pass
+
+                mostrar_mensaje(f"✅ Turno cerrado con éxito. ID: {id_turno}", ft.Colors.GREEN_700)
+                cargar_flujo_caja()
+            except Exception as ex: mostrar_mensaje(f"Error al cerrar turno: {ex}", ft.Colors.RED_700)
 
         # Contenedor 1 (A prueba de fallos de borde)
         cont_1 = ft.Container(padding=20, expand=True, content=ft.Column([
@@ -104,7 +131,12 @@ def obtener_reportes_view(page: ft.Page, on_navigate):
                 ft.Card(content=ft.Container(padding=15, bgcolor=ft.Colors.INDIGO_50, content=ft.Column([ft.Text("SALDO NETO", weight="bold", color=ft.Colors.INDIGO_900), t_neto])), expand=True)
             ]),
             ft.Divider(height=20),
-            ft.Row([ft.Text("Detalle de Transacciones", size=18, weight="bold", color=ft.Colors.BLUE_GREY_800), ft.Container(expand=True), ft.ElevatedButton("Descargar Cierre (Excel)", icon=ft.Icons.DOWNLOAD, bgcolor=ft.Colors.GREEN_700, color="white", on_click=exportar_excel)]),
+            ft.Row([
+                ft.Text("Detalle de Transacciones", size=18, weight="bold", color=ft.Colors.BLUE_GREY_800),
+                ft.Container(expand=True),
+                ft.ElevatedButton("Descargar Cierre (Excel)", icon=ft.Icons.DOWNLOAD, bgcolor=ft.Colors.GREEN_700, color="white", on_click=exportar_excel),
+                ft.ElevatedButton("Cerrar Turno", icon=ft.Icons.LOCK_CLOCK, bgcolor=ft.Colors.RED_900, color="white", on_click=cerrar_turno)
+            ]),
             ft.Container(content=ft.ListView([ft.Row([tabla_movimientos], scroll=ft.ScrollMode.AUTO)]), expand=True, border_radius=8, padding=10, bgcolor=ft.Colors.WHITE)
         ]))
 

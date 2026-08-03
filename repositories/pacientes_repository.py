@@ -12,10 +12,11 @@ class PacientesRepository:
         return list(terminos)
 
     @staticmethod
-    def registrar_paciente(dni, nombres, apellidos, telefono):
+    def registrar_paciente(dni, nombres, apellidos, telefono, correo="", direccion="", historia_fisica=""):
         terminos = PacientesRepository._generar_terminos_busqueda(nombres, apellidos)
         db.collection("pacientes").document(dni).set({
             "dni": dni, "nombres": nombres, "apellidos": apellidos, "telefono": telefono,
+            "correo": correo, "direccion": direccion, "historia_fisica": historia_fisica,
             "apellidos_lower": str(apellidos).lower(), "terminos_busqueda": terminos, 
             "fecha_registro": datetime.datetime.now(datetime.timezone.utc)
         }, merge=True)
@@ -27,8 +28,8 @@ class PacientesRepository:
             doc = db.collection("pacientes").document(query_text).get()
             return [doc.to_dict()] if doc.exists else []
         query_lower = query_text.lower() 
-        nuevos = [doc.to_dict() for doc in db.collection("pacientes").where("terminos_busqueda", "array_contains", query_lower).limit(20).stream()]
-        antiguos = [doc.to_dict() for doc in db.collection("pacientes").where("apellidos_lower", ">=", query_lower).where("apellidos_lower", "<=", query_lower + "\uf8ff").limit(20).stream()]
+        nuevos = [doc.to_dict() for doc in db.collection("pacientes").where("terminos_busqueda", "array_contains", query_lower).limit(50).stream()]
+        antiguos = [doc.to_dict() for doc in db.collection("pacientes").where("apellidos_lower", ">=", query_lower).where("apellidos_lower", "<=", query_lower + "\uf8ff").limit(50).stream()]
         return list({doc['dni']: doc for doc in (nuevos + antiguos)}.values())
 
     @staticmethod

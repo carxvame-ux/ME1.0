@@ -30,7 +30,24 @@ def obtener_triaje_view(page: ft.Page, on_navigate):
         texto_paciente = ft.Text("Seleccione un paciente de la lista", size=20, weight="bold", color=ft.Colors.GREY_500)
         texto_dni = ft.Text("", size=14, color=ft.Colors.GREY_500)
         
-        input_peso, input_talla = ft.TextField(label="Peso (kg)", width=120, disabled=True), ft.TextField(label="Talla (m)", width=120, disabled=True)
+        in_imc = ft.TextField(label="IMC", read_only=True, width=100, color=ft.Colors.BLUE_900)
+
+        def calcular_imc_vivo(e):
+            try:
+                peso = float(input_peso.value) if input_peso.value else 0
+                talla = float(input_talla.value) if input_talla.value else 0
+                if talla > 0:
+                    imc_val = peso / (talla * talla)
+                    in_imc.value = f"{imc_val:.2f}"
+                else:
+                    in_imc.value = ""
+            except ValueError:
+                in_imc.value = ""
+            if page: page.update()
+
+        input_peso = ft.TextField(label="Peso (kg)", width=120, disabled=True, on_change=calcular_imc_vivo)
+        input_talla = ft.TextField(label="Talla (m)", width=120, disabled=True, on_change=calcular_imc_vivo)
+
         input_fc, input_fr, input_pa = ft.TextField(label="F.C. (LPM)", width=100, disabled=True), ft.TextField(label="F.R. (RPM)", width=100, disabled=True), ft.TextField(label="P.A.", width=120, disabled=True)
         input_temp, input_sat = ft.TextField(label="Temp. (°C)", width=100, disabled=True), ft.TextField(label="SpO2 (%)", width=100, disabled=True)
         
@@ -45,7 +62,7 @@ def obtener_triaje_view(page: ft.Page, on_navigate):
             texto_dni.value = ""
             
             # Limpiamos solo los inputs
-            for c in [input_peso, input_talla, input_fc, input_fr, input_pa, input_temp, input_sat]: 
+            for c in [input_peso, input_talla, input_fc, input_fr, input_pa, input_temp, input_sat, in_imc]:
                 c.value = ""
                 c.disabled = True
             
@@ -58,7 +75,7 @@ def obtener_triaje_view(page: ft.Page, on_navigate):
             texto_paciente.value, texto_paciente.color, texto_dni.value = f"Paciente: {nombre}", ft.Colors.TEAL_900, f"DNI: {dni}"
             
             # Activamos y vaciamos solo los inputs
-            for c in [input_peso, input_talla, input_fc, input_fr, input_pa, input_temp, input_sat]: 
+            for c in [input_peso, input_talla, input_fc, input_fr, input_pa, input_temp, input_sat, in_imc]:
                 c.value = ""
                 c.disabled = False
             
@@ -78,7 +95,7 @@ def obtener_triaje_view(page: ft.Page, on_navigate):
             except Exception as ex: mostrar_mensaje(f"Error: {ex}", ft.Colors.RED_700)
 
         btn_guardar.on_click = guardar_triage_y_derivar
-        panel_derecho = ft.Container(bgcolor=ft.Colors.WHITE, padding=30, border_radius=10, expand=5, content=ft.Column([ft.Icon(ft.Icons.MONITOR_HEART, size=50, color=ft.Colors.TEAL_200), texto_paciente, texto_dni, ft.Divider(height=30), ft.Text("Signos Vitales Normativos:", weight="bold", color=ft.Colors.BLUE_GREY_700), ft.Row([input_temp, input_sat, input_pa], spacing=20), ft.Row([input_fc, input_fr, input_peso, input_talla], spacing=20), ft.Container(height=20), btn_guardar]))
+        panel_derecho = ft.Container(bgcolor=ft.Colors.WHITE, padding=30, border_radius=10, expand=5, content=ft.Column([ft.Icon(ft.Icons.MONITOR_HEART, size=50, color=ft.Colors.TEAL_200), texto_paciente, texto_dni, ft.Divider(height=30), ft.Text("Signos Vitales Normativos:", weight="bold", color=ft.Colors.BLUE_GREY_700), ft.Row([input_temp, input_sat, input_pa], spacing=20), ft.Row([input_fc, input_fr, input_peso, input_talla, in_imc], spacing=20), ft.Container(height=20), btn_guardar]))
 
         def cargar_cola_espera(e=None):
             lista_cola.controls.clear()

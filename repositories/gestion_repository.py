@@ -8,8 +8,19 @@ class GestionRepository:
         return [{"username": doc.id, **(doc.to_dict() or {})} for doc in db.collection("usuarios").stream()]
 
     @staticmethod
-    def guardar_usuario(username, nombres, apellidos, rol, pwd_plano=None, estado="ACTIVO"):
-        datos = {"nombres": nombres, "apellidos": apellidos, "rol": rol.upper(), "estado": estado.upper()}
+    def guardar_usuario(username, nombres, apellidos, rol, pwd_plano=None, estado="ACTIVO", permisos=None):
+        if permisos is None:
+            # Default permissions logic based on role if none provided
+            rol_upper = rol.upper()
+            permisos = {
+                "caja": rol_upper in ["ADMINISTRADOR", "ADMIN", "RECEPCION"],
+                "triaje": rol_upper in ["ADMINISTRADOR", "ADMIN", "ENFERMERIA"],
+                "consultorio": rol_upper in ["ADMINISTRADOR", "ADMIN", "MEDICO"],
+                "farmacia": rol_upper in ["ADMINISTRADOR", "ADMIN", "FARMACIA"],
+                "reportes": rol_upper in ["ADMINISTRADOR", "ADMIN"]
+            }
+
+        datos = {"nombres": nombres, "apellidos": apellidos, "rol": rol.upper(), "estado": estado.upper(), "permisos": permisos}
         if pwd_plano and str(pwd_plano).strip():
             datos["pwd"] = hashlib.sha256(str(pwd_plano).strip().encode()).hexdigest()
         db.collection("usuarios").document(username).set(datos, merge=True)
@@ -19,7 +30,8 @@ class GestionRepository:
         db.collection("admisiones_diarias").add({
             "dni": dni, "nombre_paciente": nombre_paciente, "especialidad": especialidad,
             "monto": float(monto), "metodo_pago": metodo_pago, "autoriza_cortesia": autoriza_cortesia,
-            "estado": "Pendiente de Triaje", "fecha_registro": datetime.datetime.now(datetime.timezone.utc)
+            "estado": "Pendiente de Triaje", "fecha_registro": datetime.datetime.now(datetime.timezone.utc),
+            "estado_caja": "Abierto"
         })
 
     @staticmethod

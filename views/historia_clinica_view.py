@@ -79,6 +79,35 @@ def obtener_historia_clinica_view(page: ft.Page, dni_seleccionado="", on_back=No
             except: pass
 
         # ==========================================
+        # GESTIÓN DE ARCHIVOS ADJUNTOS
+        # ==========================================
+        import shutil
+        TEMP_UPLOAD_DIR = os.path.join(os.getcwd(), "temp_uploads")
+        if not os.path.exists(TEMP_UPLOAD_DIR):
+            os.makedirs(TEMP_UPLOAD_DIR)
+
+        archivos_adjuntos = []
+        lista_archivos_ui = ft.ListView(height=100, spacing=5)
+
+        def on_dialog_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                for f in e.files:
+                    try:
+                        dest_path = os.path.join(TEMP_UPLOAD_DIR, f.name)
+                        shutil.copy2(f.path, dest_path)
+                        archivos_adjuntos.append({"nombre": f.name, "ruta": dest_path})
+                        lista_archivos_ui.controls.append(
+                            ft.ListTile(leading=ft.Icon(ft.Icons.ATTACH_FILE), title=ft.Text(f.name))
+                        )
+                        mostrar_mensaje(f"Archivo {f.name} adjuntado.", ft.Colors.GREEN_700)
+                    except Exception as ex:
+                        mostrar_mensaje(f"Error al copiar archivo: {ex}", ft.Colors.RED_700)
+                if page: page.update()
+
+        file_picker = ft.FilePicker(on_result=on_dialog_result)
+        page.overlay.append(file_picker)
+
+        # ==========================================
         # VARIABLES DE FORMULARIO
         # ==========================================
         in_motivo = ft.TextField(label="Motivo de Consulta", multiline=True, min_lines=2, expand=True)
@@ -149,6 +178,23 @@ def obtener_historia_clinica_view(page: ft.Page, dni_seleccionado="", on_back=No
         def agregar_med_receta(e):
             med_valor = in_med_nom.value.strip()
             if not med_valor or not in_med_cant.value: return
+
+            # Verificación de stock en vivo
+            from repositories.farmacia_repository import FarmaciaRepository
+            datos_inv = FarmaciaRepository.obtener_inventario_producto(med_valor)
+            stock_actual = datos_inv.get('stock', 0)
+
+            try:
+                cant_pedida = int(in_med_cant.value)
+            except ValueError:
+                cant_pedida = 1
+
+            if stock_actual < cant_pedida:
+                mostrar_mensaje(f"⚠️ Stock insuficiente en farmacia. Stock actual: {stock_actual}", ft.Colors.RED_700)
+                # Opcional: Permitir agregar igual pero marcándolo visualmente, o bloquear.
+                # Aquí lo bloquearemos para forzar una alternativa como se solicitó.
+                return
+
             med = {"medicamento": med_valor, "cantidad": str(in_med_cant.value).strip(), "indicacion": str(in_med_ind.value).strip()}
             receta_actual.append(med)
             lista_receta_ui.controls.append(ft.Card(content=ft.Container(padding=10, content=ft.ListTile(leading=ft.Icon(ft.Icons.VACCINES, color=ft.Colors.ORANGE_700), title=ft.Text(f"{med['cantidad']}x {med['medicamento']}", weight="bold"), subtitle=ft.Text(med['indicacion'])))))
@@ -162,92 +208,44 @@ def obtener_historia_clinica_view(page: ft.Page, dni_seleccionado="", on_back=No
         ])
 
         # ==========================================
-        # 🖨️ MOTOR DE IMPRESIÓN (GENERADOR HTML)
+        # 🖨️ MOTOR DE IMPRESIÓN (GENERADOR PDF)
         # ==========================================
         def imprimir_receta(e):
             if not receta_actual:
                 mostrar_mensaje("La receta está vacía. Agregue medicamentos primero.", ft.Colors.RED_700)
                 return
             
+            from utils.generador_pdf import crear_pdf_receta
+
             fecha_hoy = datetime.datetime.now().strftime("%d/%m/%Y")
+            motivo_consulta = in_motivo.value or "Consulta General"
+            diagnostico_txt = " - ".join(filter(None, [in_dx1.value, in_dx2.value, in_dx3.value])) or "En evaluación"
             
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <title>Receta Médica - {nombres_completos}</title>
-                <style>
-                    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; max-width: 700px; margin: auto; color: #333; }}
-                    .header {{ text-align: center; border-bottom: 3px solid #1E3A8A; padding-bottom: 15px; margin-bottom: 25px; }}
-                    .clinic-title {{ font-size: 26px; color: #1E3A8A; font-weight: bold; letter-spacing: 1px; }}
-                    .doctor-title {{ font-size: 18px; color: #555; margin-top: 5px; }}
-                    .patient-box {{ background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin-bottom: 30px; font-size: 15px; }}
-                    .patient-box strong {{ color: #1E3A8A; }}
-                    .rx-logo {{ font-size: 48px; font-family: Georgia, serif; color: #1E3A8A; font-style: italic; margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }}
-                    .med-list {{ margin-left: 10px; }}
-                    .med-item {{ margin-bottom: 18px; line-height: 1.5; }}
-                    .med-name {{ font-size: 16px; font-weight: bold; color: #000; }}
-                    .med-ind {{ font-size: 15px; color: #444; display: block; padding-left: 20px; }}
-                    .footer {{ margin-top: 80px; text-align: center; }}
-                    .signature-line {{ width: 250px; border-top: 1px solid #000; margin: 0 auto; padding-top: 10px; font-weight: bold; }}
-                    .cmp {{ font-size: 12px; color: #666; font-weight: normal; }}
-                    @media print {{ body {{ padding: 0; }} }}
-                </style>
-            </head>
-            <body onload="window.print()">
-                <div class="header">
-                    <div class="clinic-title">SISTEMA MÉDICO EMPRESARIAL</div>
-                    <div class="doctor-title">Dr(a). {nombre_medico}</div>
-                </div>
-                
-                <div class="patient-box">
-                    <table style="width: 100%;">
-                        <tr>
-                            <td><strong>Paciente:</strong> {nombres_completos}</td>
-                            <td style="text-align: right;"><strong>Fecha:</strong> {fecha_hoy}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>DNI:</strong> {dni_final}</td>
-                            <td style="text-align: right;"><strong>Próxima Cita:</strong> {in_cita.value or 'A demanda'}</td>
-                        </tr>
-                    </table>
-                </div>
-
-                <div class="rx-logo">Rx</div>
-                
-                <div class="med-list">
-            """
-
-            for med in receta_actual:
-                html_content += f"""
-                    <div class="med-item">
-                        <span class="med-name">➤ {med['cantidad']} x {med['medicamento']}</span>
-                        <span class="med-ind">Indicación: {med['indicacion']}</span>
-                    </div>
-                """
-
-            html_content += f"""
-                </div>
-
-                <div class="footer">
-                    <div class="signature-line">
-                        Firma y Sello<br>
-                        Dr(a). {nombre_medico}<br>
-                        <span class="cmp">CMP: ___________</span>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-
-            # Guardamos el archivo y le pedimos al sistema operativo que lo abra
-            ruta_html = os.path.abspath("receta_impresa.html")
-            with open(ruta_html, "w", encoding="utf-8") as f:
-                f.write(html_content)
+            # Adaptar los medicamentos al formato que espera el generador PDF
+            meds_para_pdf = []
+            for m in receta_actual:
+                meds_para_pdf.append({
+                    "nombre": m["medicamento"],
+                    "dosis": str(m["cantidad"]),
+                    "frecuencia": m["indicacion"]
+                })
             
-            # Formato de ruta compatible con navegadores en Windows
-            webbrowser.open(f"file:///{ruta_html.replace(chr(92), '/')}")
+            instrucciones = in_plan.value or "Ninguna instrucción adicional."
+
+            try:
+                ruta_pdf = crear_pdf_receta(
+                    nombre_paciente=nombres_completos,
+                    dni_paciente=dni_final,
+                    fecha=fecha_hoy,
+                    motivo=motivo_consulta,
+                    diagnostico=diagnostico_txt,
+                    medicamentos=meds_para_pdf,
+                    instrucciones=instrucciones
+                )
+                webbrowser.open(f"file:///{ruta_pdf.replace(chr(92), '/')}")
+                mostrar_mensaje("Receta generada en PDF con éxito.", ft.Colors.GREEN_700)
+            except Exception as ex:
+                mostrar_mensaje(f"Error al generar PDF: {ex}", ft.Colors.RED_700)
 
         # ==========================================
         # HISTORIAL DEL PACIENTE
@@ -292,7 +290,8 @@ def obtener_historia_clinica_view(page: ft.Page, dni_seleccionado="", on_back=No
                 "diagnosticos": [in_dx1.value, in_dx2.value, in_dx3.value],
                 "plan_trabajo": in_plan.value, 
                 "receta": receta_actual, 
-                "proxima_cita": in_cita.value
+                "proxima_cita": in_cita.value,
+                "archivos_adjuntos": archivos_adjuntos
             }
             try:
                 PacientesRepository.guardar_historia_dinamica(dni_final, datos_clinicos)
@@ -334,6 +333,13 @@ def obtener_historia_clinica_view(page: ft.Page, dni_seleccionado="", on_back=No
             ft.Text("PLAN DE TRABAJO (Exámenes, Dietas)", weight="bold", color=ft.Colors.BLUE_900),
             in_plan, in_cita, ft.Divider(height=20),
             
+            ft.Text("ARCHIVOS ADJUNTOS (Exámenes, Endoscopias)", weight="bold", color=ft.Colors.BLUE_900),
+            ft.Row([
+                ft.ElevatedButton("Adjuntar Archivo", icon=ft.Icons.ATTACH_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=True))
+            ]),
+            lista_archivos_ui,
+            ft.Divider(height=20),
+
             # --- BOTÓN DE IMPRESIÓN AÑADIDO AQUÍ ---
             ft.Row([
                 ft.Text("RECETA MÉDICA", weight="bold", color=ft.Colors.ORANGE_800),
