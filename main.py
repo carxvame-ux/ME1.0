@@ -7,6 +7,7 @@ from views.farmacia_view import obtener_farmacia_view
 from views.reportes_view import obtener_reportes_view
 from views.historia_clinica_view import obtener_historia_clinica_view
 from views.login_view import obtener_login_view
+from views.agenda_view import obtener_agenda_view
 
 def main(page: ft.Page):
     page.title = "Sistema Médico"
@@ -20,14 +21,16 @@ def main(page: ft.Page):
     # 2. Atrapamos el éxito del Login y enrutamos según el rol
     def manejar_login_exitoso(usuario_sesion):
         page.usuario_actual = usuario_sesion
-        rol = str(usuario_sesion.get("rol", ""))
+        rol = str(usuario_sesion.get("rol", "")).lower()
+        permisos = usuario_sesion.get("permisos", {})
         
-        if rol == "enfermeria":
+        if rol in ["administrador", "admin", "medico", "recepcion"]:
+            cambiar_ruta("/")
+        elif permisos.get("triaje", rol == "enfermeria"):
             cambiar_ruta("/triaje")
-        elif rol == "farmacia":
+        elif permisos.get("farmacia", rol == "farmacia"):
             cambiar_ruta("/farmacia")
         else:
-            # Administrador, Médico o Recepción van al Dashboard
             cambiar_ruta("/")
 
     # 3. Gestor principal de pantallas
@@ -48,21 +51,57 @@ def main(page: ft.Page):
             # Pasamos la función manejar_login_exitoso a tu archivo login_view
             page.views.append(obtener_login_view(page, manejar_login_exitoso))
             
-        elif ruta == "/":
-            page.views.append(obtener_dashboard_view(page, cambiar_ruta))
+        else:
+            # Verificar permisos para otras rutas
+            usuario = page.usuario_actual
+            permisos = usuario.get("permisos", {}) if usuario else {}
+            rol = str(usuario.get("rol", "")).lower() if usuario else ""
+            es_admin = rol in ["administrador", "admin"]
             
-        elif ruta == "/triaje":
-            page.views.append(obtener_triaje_view(page, cambiar_ruta))
-            
-        elif ruta == "/farmacia":
-            page.views.append(obtener_farmacia_view(page, cambiar_ruta))
-            
-        elif ruta == "/reportes":
-            page.views.append(obtener_reportes_view(page, cambiar_ruta))
-            
-        elif ruta.startswith("/paciente/") and ruta.endswith("/datos"):
-            dni_extraido = ruta.split("/")[2]
-            page.views.append(obtener_historia_clinica_view(page, dni_seleccionado=dni_extraido, on_navigate=cambiar_ruta))
+            def mostrar_denegado():
+                import flet as ft
+                pantalla_bloqueo = ft.Column([
+                    ft.Icon(ft.Icons.LOCK, color=ft.Colors.RED_700, size=80),
+                    ft.Text("ACCESO DENEGADO", color=ft.Colors.RED_700, size=30, weight="bold"),
+                    ft.Text("No tienes permisos para acceder a este módulo.", color=ft.Colors.GREY_700, size=16),
+                    ft.Container(height=20),
+                    ft.ElevatedButton("Volver al Inicio", icon=ft.Icons.ARROW_BACK, on_click=lambda _: cambiar_ruta("/"))
+                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+                page.views.append(ft.View(route=ruta, controls=[ft.Container(content=pantalla_bloqueo, alignment=ft.alignment.center, expand=True)]))
+
+            if ruta == "/":
+                page.views.append(obtener_dashboard_view(page, cambiar_ruta))
+
+            elif ruta == "/triaje":
+                if permisos.get("triaje", es_admin or rol == "enfermeria"):
+                    page.views.append(obtener_triaje_view(page, cambiar_ruta))
+                else:
+                    mostrar_denegado()
+
+            elif ruta == "/farmacia":
+                if permisos.get("farmacia", es_admin or rol == "farmacia"):
+                    page.views.append(obtener_farmacia_view(page, cambiar_ruta))
+                else:
+                    mostrar_denegado()
+
+            elif ruta == "/reportes":
+                if permisos.get("reportes", es_admin):
+                    page.views.append(obtener_reportes_view(page, cambiar_ruta))
+                else:
+                    mostrar_denegado()
+
+            elif ruta == "/agenda":
+                if permisos.get("caja", es_admin or rol == "recepcion"):
+                    page.views.append(obtener_agenda_view(page, cambiar_ruta))
+                else:
+                    mostrar_denegado()
+
+            elif ruta.startswith("/paciente/") and ruta.endswith("/datos"):
+                if permisos.get("consultorio", es_admin or rol == "medico"):
+                    dni_extraido = ruta.split("/")[2]
+                    page.views.append(obtener_historia_clinica_view(page, dni_seleccionado=dni_extraido, on_navigate=cambiar_ruta))
+                else:
+                    mostrar_denegado()
 
         page.update()
 

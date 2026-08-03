@@ -56,7 +56,24 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
         # 2. GESTIÓN DE PERSONAL
         # ==========================================
         in_usr_id, in_usr_nom, in_usr_ape, in_usr_pwd = ft.TextField(label="ID Usuario", width=150), ft.TextField(label="Nombres", width=150), ft.TextField(label="Apellidos", width=150), ft.TextField(label="Contraseña", password=True, can_reveal_password=True, width=150)
-        dp_usr_rol, dp_usr_est = ft.Dropdown(label="Rol", width=150, options=[ft.dropdown.Option("ADMINISTRADOR"), ft.dropdown.Option("MEDICO"), ft.dropdown.Option("ENFERMERIA"), ft.dropdown.Option("FARMACIA"), ft.dropdown.Option("RECEPCION")]), ft.Dropdown(label="Estado", width=120, value="ACTIVO", options=[ft.dropdown.Option("ACTIVO"), ft.dropdown.Option("INACTIVO")])
+
+        sw_caja = ft.Switch(label="Admisión/Caja", value=False)
+        sw_triaje = ft.Switch(label="Triaje", value=False)
+        sw_consultorio = ft.Switch(label="Consultorio/Historia", value=False)
+        sw_farmacia = ft.Switch(label="Farmacia", value=False)
+        sw_reportes = ft.Switch(label="Reportes", value=False)
+
+        def on_rol_change(e):
+            r = dp_usr_rol.value
+            sw_caja.value = r in ["ADMINISTRADOR", "RECEPCION"]
+            sw_triaje.value = r in ["ADMINISTRADOR", "ENFERMERIA"]
+            sw_consultorio.value = r in ["ADMINISTRADOR", "MEDICO"]
+            sw_farmacia.value = r in ["ADMINISTRADOR", "FARMACIA"]
+            sw_reportes.value = r in ["ADMINISTRADOR"]
+            if page: page.update()
+
+        dp_usr_rol = ft.Dropdown(label="Rol (Plantilla)", width=150, options=[ft.dropdown.Option("ADMINISTRADOR"), ft.dropdown.Option("MEDICO"), ft.dropdown.Option("ENFERMERIA"), ft.dropdown.Option("FARMACIA"), ft.dropdown.Option("RECEPCION")], on_change=on_rol_change)
+        dp_usr_est = ft.Dropdown(label="Estado", width=120, value="ACTIVO", options=[ft.dropdown.Option("ACTIVO"), ft.dropdown.Option("INACTIVO")])
         lst_usuarios = ft.ListView(height=200, spacing=5)
 
         def cargar_usuarios(e=None):
@@ -69,15 +86,35 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
 
         def load_usr(usr):
             in_usr_id.value, in_usr_id.disabled, in_usr_nom.value, in_usr_ape.value, in_usr_pwd.value, dp_usr_rol.value, dp_usr_est.value = usr['username'], True, usr.get('nombres', ''), usr.get('apellidos', ''), "", usr.get('rol', '').upper(), usr.get('estado', 'ACTIVO').upper()
+
+            p = usr.get("permisos", {})
+            sw_caja.value = p.get("caja", False)
+            sw_triaje.value = p.get("triaje", False)
+            sw_consultorio.value = p.get("consultorio", False)
+            sw_farmacia.value = p.get("farmacia", False)
+            sw_reportes.value = p.get("reportes", False)
+
             page.update()
 
         def save_usr(e):
             if not in_usr_id.value or not in_usr_nom.value or not dp_usr_rol.value: return
-            GestionRepository.guardar_usuario(in_usr_id.value.strip().lower(), in_usr_nom.value.strip(), in_usr_ape.value.strip(), dp_usr_rol.value, in_usr_pwd.value.strip(), dp_usr_est.value)
+            p = {
+                "caja": sw_caja.value, "triaje": sw_triaje.value,
+                "consultorio": sw_consultorio.value, "farmacia": sw_farmacia.value, "reportes": sw_reportes.value
+            }
+            GestionRepository.guardar_usuario(in_usr_id.value.strip().lower(), in_usr_nom.value.strip(), in_usr_ape.value.strip(), dp_usr_rol.value, in_usr_pwd.value.strip(), dp_usr_est.value, p)
             in_usr_id.value, in_usr_nom.value, in_usr_ape.value, in_usr_pwd.value, in_usr_id.disabled, dp_usr_rol.value = "", "", "", "", False, None
+            sw_caja.value, sw_triaje.value, sw_consultorio.value, sw_farmacia.value, sw_reportes.value = False, False, False, False, False
             cargar_usuarios(e)
 
-        dlg_usuarios = ft.AlertDialog(title=ft.Text("Personal"), content=ft.Container(width=650, content=ft.Column([ft.Row([in_usr_id, in_usr_nom, in_usr_ape], wrap=True), ft.Row([dp_usr_rol, in_usr_pwd, dp_usr_est], wrap=True), ft.ElevatedButton("Guardar", bgcolor=ft.Colors.GREEN_700, color="white", on_click=save_usr), ft.Divider(), lst_usuarios], tight=True)), actions=[ft.TextButton("Cerrar", on_click=lambda _: page.pop_dialog())])
+        dlg_usuarios = ft.AlertDialog(title=ft.Text("Personal"), content=ft.Container(width=650, content=ft.Column([
+            ft.Row([in_usr_id, in_usr_nom, in_usr_ape], wrap=True),
+            ft.Row([dp_usr_rol, in_usr_pwd, dp_usr_est], wrap=True),
+            ft.Text("Permisos Especiales:", weight="bold", color=ft.Colors.BLUE_900),
+            ft.Row([sw_caja, sw_triaje, sw_consultorio, sw_farmacia, sw_reportes], wrap=True),
+            ft.ElevatedButton("Guardar", bgcolor=ft.Colors.GREEN_700, color="white", on_click=save_usr),
+            ft.Divider(), lst_usuarios
+        ], tight=True)), actions=[ft.TextButton("Cerrar", on_click=lambda _: page.pop_dialog())])
 
         def abrir_admin(e):
             in_usr_id.value, in_usr_nom.value, in_usr_ape.value, in_usr_pwd.value, in_usr_id.disabled, dp_usr_rol.value = "", "", "", "", False, None
@@ -86,17 +123,34 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
         # ==========================================
         # 3. CREACIÓN DE PACIENTES
         # ==========================================
-        in_p_dni, in_p_nom, in_p_ape, in_p_tel = ft.TextField(label="DNI", width=150, max_length=8), ft.TextField(label="Nombres", width=200), ft.TextField(label="Apellidos", width=200), ft.TextField(label="Teléfono", width=150)
+        in_p_dni = ft.TextField(label="DNI", width=150, max_length=8, keyboard_type="number", input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]", replacement_string=""))
+        in_p_tel = ft.TextField(label="Teléfono", width=150, max_length=9, keyboard_type="number", input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]", replacement_string=""))
+        in_p_nom, in_p_ape = ft.TextField(label="Nombres", width=200), ft.TextField(label="Apellidos", width=200)
+        in_p_correo = ft.TextField(label="Correo Electrónico", width=200)
+        in_p_dir = ft.TextField(label="Dirección", width=200)
+        in_p_historia = ft.TextField(label="N° Historia Física", width=150)
 
         def save_pac(e):
             if not in_p_dni.value or not in_p_nom.value or not in_p_ape.value: return
-            PacientesRepository.registrar_paciente(in_p_dni.value.strip(), in_p_nom.value.strip(), in_p_ape.value.strip(), in_p_tel.value.strip())
+
+            # Simple email validation logic
+            correo = in_p_correo.value.strip()
+            if correo and "@" not in correo:
+                mostrar_mensaje("Por favor, ingrese un correo válido.", ft.Colors.RED_700)
+                return
+
+            PacientesRepository.registrar_paciente(
+                in_p_dni.value.strip(), in_p_nom.value.strip(), in_p_ape.value.strip(), in_p_tel.value.strip(),
+                correo, in_p_dir.value.strip(), in_p_historia.value.strip()
+            )
             page.pop_dialog(); ejecutar_busqueda(e)
 
-        dlg_paciente = ft.AlertDialog(title=ft.Text("Datos Paciente"), content=ft.Column([ft.Row([in_p_dni, in_p_tel]), in_p_nom, in_p_ape], tight=True), actions=[ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()), ft.ElevatedButton("Guardar", bgcolor=ft.Colors.GREEN_700, color="white", on_click=save_pac)])
+        dlg_paciente = ft.AlertDialog(title=ft.Text("Datos Paciente"), content=ft.Column([ft.Row([in_p_dni, in_p_tel, in_p_historia]), ft.Row([in_p_nom, in_p_ape]), ft.Row([in_p_correo, in_p_dir])], tight=True), actions=[ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()), ft.ElevatedButton("Guardar", bgcolor=ft.Colors.GREEN_700, color="white", on_click=save_pac)])
 
-        def abrir_modal_paciente(dni="", nom="", ape="", tel="", edit=False):
-            in_p_dni.value, in_p_dni.disabled, in_p_nom.value, in_p_ape.value, in_p_tel.value = dni, edit, nom, ape, tel
+        def abrir_modal_paciente(dni="", nom="", ape="", tel="", correo="", dir="", hist="", edit=False):
+            in_p_dni.value, in_p_dni.disabled = dni, edit
+            in_p_nom.value, in_p_ape.value, in_p_tel.value = nom, ape, tel
+            in_p_correo.value, in_p_dir.value, in_p_historia.value = correo, dir, hist
             if edit: page.pop_dialog()
             page.show_dialog(dlg_paciente)
 
@@ -118,14 +172,15 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
 
         dlg_admision = ft.AlertDialog(title=ft.Text("Caja"), content=ft.Column([dp_esp, ft.Row([dp_met, in_monto]), in_aut], tight=True), actions=[ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()), ft.ElevatedButton("Cobrar", bgcolor=ft.Colors.GREEN_600, color="white", on_click=cobrar)])
 
-        def opciones_pac(dni, nom, ape, tel):
+        def opciones_pac(dni, nom, ape, tel, correo="", dir="", hist=""):
             nonlocal paciente_sel_dni, paciente_sel_nom
             paciente_sel_dni, paciente_sel_nom = dni, f"{nom} {ape}"
             btn = []
-            if es_admin or rol_usuario == "recepcion":
+            permisos = usuario.get("permisos", {}) if usuario else {}
+            if permisos.get("caja", es_admin or rol_usuario == "recepcion"):
                 btn.append(ft.ElevatedButton("Cobrar Consulta", icon=ft.Icons.POINT_OF_SALE, bgcolor=ft.Colors.GREEN_600, color="white", width=250, on_click=lambda _: [page.pop_dialog(), page.show_dialog(dlg_admision)]))
-                btn.append(ft.ElevatedButton("Editar Datos", icon=ft.Icons.EDIT, bgcolor=ft.Colors.BLUE_GREY_600, color="white", width=250, on_click=lambda _: abrir_modal_paciente(dni, nom, ape, tel, True)))
-            if es_admin or rol_usuario == "medico":
+                btn.append(ft.ElevatedButton("Editar Datos", icon=ft.Icons.EDIT, bgcolor=ft.Colors.BLUE_GREY_600, color="white", width=250, on_click=lambda _: abrir_modal_paciente(dni, nom, ape, tel, correo, dir, hist, True)))
+            if permisos.get("consultorio", es_admin or rol_usuario == "medico"):
                 btn.append(ft.ElevatedButton("Historia Clínica", icon=ft.Icons.FOLDER_SHARED, bgcolor=ft.Colors.BLUE_700, color="white", width=250, on_click=lambda _: [page.pop_dialog(), on_navigate(f"/paciente/{dni}/datos")]))
             page.show_dialog(ft.AlertDialog(title=ft.Text(paciente_sel_nom, size=16), content=ft.Column(btn, tight=True), actions=[ft.TextButton("Cerrar", on_click=lambda _: page.pop_dialog())]))
 
@@ -152,7 +207,15 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
             lst_pacientes.controls.clear()
             if not q: lst_pacientes.controls.append(ft.Text("Ingrese búsqueda...", color=ft.Colors.GREY_500, italic=True))
             else:
-                for d in PacientesRepository.buscar_paciente_mixto(q): lst_pacientes.controls.append(ft.Card(content=ft.Container(content=ft.ListTile(leading=ft.CircleAvatar(content=ft.Text("P"), bgcolor=ft.Colors.BLUE_700),title=ft.Text(f"{d.get('apellidos','')}, {d.get('nombres','')}", weight="bold"),subtitle=ft.Text(f"DNI: {d.get('dni','')}"), on_click=lambda ev, d1=d.get('dni',''), n=d.get('nombres',''), a=d.get('apellidos',''), t=d.get('telefono',''): opciones_pac(d1, n, a, t)), padding=5)))
+                for d in PacientesRepository.buscar_paciente_mixto(q):
+                    lst_pacientes.controls.append(
+                        ft.Card(content=ft.Container(content=ft.ListTile(
+                            leading=ft.CircleAvatar(content=ft.Text("P"), bgcolor=ft.Colors.BLUE_700),
+                            title=ft.Text(f"{d.get('apellidos','')}, {d.get('nombres','')}", weight="bold"),
+                            subtitle=ft.Text(f"DNI: {d.get('dni','')} | Tel: {d.get('telefono','')}"),
+                            on_click=lambda ev, d1=d.get('dni',''), n=d.get('nombres',''), a=d.get('apellidos',''), t=d.get('telefono',''), c=d.get('correo',''), dir=d.get('direccion',''), h=d.get('historia_fisica',''): opciones_pac(d1, n, a, t, c, dir, h)
+                        ), padding=5))
+                    )
             if page: page.update()
         in_busqueda.on_submit = ejecutar_busqueda
 
@@ -160,11 +223,16 @@ def obtener_dashboard_view(page: ft.Page, on_navigate):
         # ENSAMBLAJE DE LA VISTA
         # ==========================================
         seccion_superior, row_modulos = ft.Column(spacing=10), ft.Row(wrap=True)
-        if es_admin or rol_usuario == "recepcion": row_modulos.controls.append(ft.ElevatedButton("Nuevo Paciente", icon=ft.Icons.PERSON_ADD, bgcolor=ft.Colors.GREEN_700, color="white", on_click=lambda _: abrir_modal_paciente()))
-        if es_admin or rol_usuario == "enfermeria": row_modulos.controls.append(ft.ElevatedButton("Ir a Triaje", icon=ft.Icons.MEDICAL_SERVICES, bgcolor=ft.Colors.TEAL_700, color="white", on_click=lambda _: on_navigate("/triaje")))
-        if es_admin or rol_usuario == "farmacia": row_modulos.controls.append(ft.ElevatedButton("Farmacia", icon=ft.Icons.LOCAL_PHARMACY, bgcolor=ft.Colors.ORANGE_700, color="white", on_click=lambda _: on_navigate("/farmacia")))
+        permisos = usuario.get("permisos", {}) if usuario else {}
+        if permisos.get("caja", es_admin or rol_usuario == "recepcion"):
+            row_modulos.controls.append(ft.ElevatedButton("Nuevo Paciente", icon=ft.Icons.PERSON_ADD, bgcolor=ft.Colors.GREEN_700, color="white", on_click=lambda _: abrir_modal_paciente()))
+            row_modulos.controls.append(ft.ElevatedButton("Agenda de Citas", icon=ft.Icons.CALENDAR_MONTH, bgcolor=ft.Colors.DEEP_PURPLE_700, color="white", on_click=lambda _: on_navigate("/agenda")))
+        if permisos.get("triaje", es_admin or rol_usuario == "enfermeria"):
+            row_modulos.controls.append(ft.ElevatedButton("Ir a Triaje", icon=ft.Icons.MEDICAL_SERVICES, bgcolor=ft.Colors.TEAL_700, color="white", on_click=lambda _: on_navigate("/triaje")))
+        if permisos.get("farmacia", es_admin or rol_usuario == "farmacia"):
+            row_modulos.controls.append(ft.ElevatedButton("Farmacia", icon=ft.Icons.LOCAL_PHARMACY, bgcolor=ft.Colors.ORANGE_700, color="white", on_click=lambda _: on_navigate("/farmacia")))
         
-        if es_admin:
+        if permisos.get("reportes", es_admin):
             row_modulos.controls.append(ft.ElevatedButton("Registrar Gasto", icon=ft.Icons.MONEY_OFF, bgcolor=ft.Colors.RED_700, color="white", on_click=lambda _: page.show_dialog(dlg_gasto)))
             row_modulos.controls.append(ft.ElevatedButton("Personal", icon=ft.Icons.ADMIN_PANEL_SETTINGS, bgcolor=ft.Colors.BLUE_GREY_800, color="white", on_click=abrir_admin))
             row_modulos.controls.append(ft.ElevatedButton("Reportes y Caja", icon=ft.Icons.ANALYTICS, bgcolor=ft.Colors.INDIGO_900, color="white", on_click=lambda _: on_navigate("/reportes")))
